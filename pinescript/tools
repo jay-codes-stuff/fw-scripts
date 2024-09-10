@@ -1,0 +1,479 @@
+//@version=5
+indicator("Tools by Mars", overlay=true)
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © marsrides
+// v 1.0 September 2024
+
+// Filters Group
+var group_filters = "Filters"
+showFilters = input.bool(true, "Show Trend Filters", group=group_filters, tooltip="MACD, SPY 10/20 EMA, Minervini Trend Criteria, etc.")
+
+// Performance Metrics Group
+var group_performance = "Performance Metrics"
+show_quality_table = input.bool(true, "Show Quality Metrics Table", group=group_performance, display=display.none)
+showMonthAverage = input.bool(false, "Show Stock/SPY average for Months", group=group_performance, display=display.none)
+showCAnslim = input.bool(true, "Show C and A from CANSLIM", group=group_performance, display=display.none)
+showRS = input.bool(false, "Show RS to SPY", group=group_performance, display=display.none)
+
+// ATR Multiple Group
+var group_atr = "ATR Multiple"
+show_atr_multiple = input.bool(true, "Show ATR% of 50d EMA", group=group_atr)
+positive_min = input.int(6, "Positive Multiple Min", minval=1, step=1, group=group_atr, display=display.none)
+positive_max = input.int(8, "Positive Multiple Max", minval=1, step=1, group=group_atr, display=display.none)
+negative_min = input.int(1, "Negative Multiple Min", minval=1, step=1, group=group_atr, display=display.none)
+negative_max = input.int(2, "Negative Multiple Max", minval=1, step=1, group=group_atr, display=display.none)
+
+// Overextension Detection Group
+var group_overextension = "Overextension Detection"
+detectOX = input.bool(true, "Detect overextension using BB and RSI", group=group_overextension, display=display.none)
+rsi_threshold = input.int(80, "RSI Threshold", group=group_overextension, display=display.none)
+percentage_above_bb = input.float(10.0, "Percentage Above BB", group=group_overextension, display=display.none)
+
+// 52-Week Group
+var group_52week = "52-Week Tool"
+show52WeekElements = input.bool(false, "Show 52-Week Levels", group=group_52week, display=display.none)
+show52 = input.bool(false, "Show 52w highs marker", group=group_52week, display=display.none)
+middleLinePercentage = input.float(20, "Middle Line Percentage", minval=1, maxval=100, step=0.1, group=group_52week, display=display.none)
+showHighLine = input.bool(true, "Show High Line", group=group_52week, display=display.none)
+showLowLine = input.bool(true, "Show Low Line", group=group_52week, display=display.none)
+showMiddleLine = input.bool(true, "Show Middle Line", group=group_52week, display=display.none)
+
+// 52-Week Cosmetics Subgroup
+var group_52week_cosmetics = "52-Week Cosmetics"
+highColor = input.color(color.green, "High Color", group=group_52week_cosmetics, display=display.none)
+lowColor = input.color(color.red, "Low Color", group=group_52week_cosmetics, display=display.none)
+middleColor = input.color(color.orange, "Middle Line Color", group=group_52week_cosmetics, display=display.none)
+lineStyle = input.string("Solid", "Line Style", options=["Solid", "Dashed", "Dotted"], group=group_52week_cosmetics, display=display.none)
+
+// 52-Week Labels Subgroup
+var group_52week_labels = "52-Week Labels"
+highText = input.string("52w High", "High Label", group=group_52week_labels, display=display.none)
+lowText = input.string("52w Low", "Low Label", group=group_52week_labels, display=display.none)
+middleText = input.string("% off high", "Middle Line Label", group=group_52week_labels, display=display.none)
+spaces = input.int(5, "Horizontal spaces between price and labels", minval=0, group=group_52week_labels, display=display.none)
+
+// 52-Week Alerts Subgroup
+var group_52week_alerts = "52-Week Alerts"
+alertOnHighCross = input.bool(false, "Alert on High Line Cross", group=group_52week_alerts, display=display.none)
+alertOnLowCross = input.bool(false, "Alert on Low Line Cross", group=group_52week_alerts, display=display.none)
+alertOnMiddleCross = input.bool(false, "Alert on Middle Line Cross", group=group_52week_alerts, display=display.none)
+
+// Relative Strength to SPY
+spyClose = request.security("SPY", "W", close)
+stockChange = (close - close[1]) / close[1] * 100
+spyChange = (spyClose - request.security("SPY", "W", close[1])) / request.security("SPY", "W", close[1]) * 100
+performanceDiff = stockChange - spyChange
+isUp = performanceDiff > 0
+textColor = isUp ? color.green : color.red
+labelColor = color.new(color.black, 100)
+
+if showRS
+    label.new(bar_index, high, str.tostring(performanceDiff, "#.##") + "%", 
+              textcolor=textColor, color=labelColor, size=size.tiny, 
+              style=label.style_label_down, yloc=yloc.abovebar)
+
+// Quality Metrics Table
+piotroski = request.financial(syminfo.tickerid, "PIOTROSKI_F_SCORE", "FY", ignore_invalid_symbol = true)
+roe = request.financial(syminfo.tickerid, "RETURN_ON_EQUITY", "FY", ignore_invalid_symbol = true)
+current_ratio = request.financial(syminfo.tickerid, "CURRENT_RATIO", "FY", ignore_invalid_symbol = true)
+oper_margin = request.financial(syminfo.tickerid, "OPERATING_MARGIN", "FY", ignore_invalid_symbol = true)
+roc = request.financial(syminfo.tickerid, "RETURN_ON_COMMON_EQUITY", "FY", ignore_invalid_symbol = true)
+altman = request.financial(syminfo.tickerid, "ALTMAN_Z_SCORE", "FY", ignore_invalid_symbol = true)
+
+piotroski_threshold = 5
+roe_threshold = 10
+current_ratio_threshold = 1.5
+oper_margin_threshold = 10
+altman_threshold = 1.5
+
+piotroski_check = piotroski >= piotroski_threshold ? "✅" : "⚠️"
+roe_check = roe >= roe_threshold ? "✅" : "⚠️"
+current_ratio_check = current_ratio >= current_ratio_threshold ? "✅" : "⚠️"
+oper_margin_check = oper_margin >= oper_margin_threshold ? "✅" : "⚠️"
+altman_check = altman >= altman_threshold ? "✅" : "⚠️"
+
+piotroski_rounded = str.tostring(piotroski, "#.##")
+roe_rounded = str.tostring(roe, "#.##") + "%"
+current_ratio_rounded = str.tostring(current_ratio, "#.##")
+oper_margin_rounded = str.tostring(oper_margin, "#.##") + "%"
+altman_rounded = str.tostring(altman, "#.##")
+
+piotroski_text = piotroski_check + "  Piotroski F-Score"
+roe_text = roe_check + "  Return on Equity (ROE)"
+current_ratio_text = current_ratio_check + "  Current Ratio"
+oper_margin_text = oper_margin_check + "  Operating Margin"
+altman_text = altman_check + "  Altman Z-Score"
+
+if (show_quality_table and barstate.islast)
+    var table quality_table = table.new(position.top_right, 2, 6, bgcolor=color.new(color.white, 100))
+    
+    table.cell(quality_table, 0, 0, "Metric", bgcolor=color.new(color.black, 80), text_color=color.white, text_halign=text.align_left)
+    table.cell(quality_table, 1, 0, "Value", bgcolor=color.new(color.black, 80), text_color=color.white, text_halign=text.align_right)
+    
+    table.cell(quality_table, 0, 1, piotroski_text, text_color=color.gray, text_halign=text.align_left)
+    table.cell(quality_table, 1, 1, piotroski_rounded, text_color=color.gray, text_halign=text.align_right)
+    
+    table.cell(quality_table, 0, 2, roe_text, text_color=color.gray, text_halign=text.align_left)
+    table.cell(quality_table, 1, 2, roe_rounded, text_color=color.gray, text_halign=text.align_right)
+    
+    table.cell(quality_table, 0, 3, current_ratio_text, text_color=color.gray, text_halign=text.align_left)
+    table.cell(quality_table, 1, 3, current_ratio_rounded, text_color=color.gray, text_halign=text.align_right)
+    
+    table.cell(quality_table, 0, 4, oper_margin_text, text_color=color.gray, text_halign=text.align_left)
+    table.cell(quality_table, 1, 4, oper_margin_rounded, text_color=color.gray, text_halign=text.align_right)
+    
+    table.cell(quality_table, 0, 5, altman_text, text_color=color.gray, text_halign=text.align_left)
+    table.cell(quality_table, 1, 5, altman_rounded, text_color=color.gray, text_halign=text.align_right)
+
+// Stock/SPY average for Months
+f_getMonthNamePlural(monthNum) =>
+    array.get(array.from("Januaries", "Februaries", "Marches", "Aprils", "Mays", "Junes", "Julies", "Augusts", "Septembers", "Octobers", "Novembers", "Decembers"), monthNum - 1)
+
+f_monthlyStats(monthlyOpen, monthlyClose, targetMonth) =>
+    isTargetMonth = month(time) == targetMonth
+    monthReturn = isTargetMonth ? (monthlyClose - monthlyOpen) / monthlyOpen * 100 : 0.0
+    
+    var float sumReturns = 0.0
+    var float sumSquaredDeviations = 0.0
+    var int countYears = 0
+    var int countPositive = 0
+    var int lastYear = 0
+    
+    if isTargetMonth and not na(monthReturn) and year(time) != lastYear
+        sumReturns += monthReturn
+        countYears += 1
+        lastYear := year(time)
+        if monthReturn > 0
+            countPositive += 1
+    
+    avgReturn = countYears > 0 ? sumReturns / countYears : na
+    
+    if isTargetMonth and not na(monthReturn) and year(time) != lastYear[1]
+        deviation = monthReturn - avgReturn
+        sumSquaredDeviations += math.pow(deviation, 2)
+    
+    stdDev = countYears > 1 ? math.sqrt(sumSquaredDeviations / (countYears - 1)) : na
+    probabilityPositive = countYears > 0 ? math.round((countPositive / countYears) * 100) : na
+    [avgReturn, probabilityPositive, stdDev, countYears]
+
+f_calculateRange(avgReturn, stdDev) =>
+    lowerBound = avgReturn - stdDev
+    upperBound = avgReturn + stdDev
+    [lowerBound, upperBound]
+
+currentMonth = month(timenow)
+currentMonthNamePlural = f_getMonthNamePlural(currentMonth)
+
+stockMonthlyOpen = request.security(syminfo.ticker, "M", open[1], lookahead=barmerge.lookahead_on)
+stockMonthlyClose = request.security(syminfo.ticker, "M", close, lookahead=barmerge.lookahead_on)
+[avgReturnStock, probPositiveStock, stdDevStock, yearsStock] = f_monthlyStats(stockMonthlyOpen, stockMonthlyClose, currentMonth)
+
+spyMonthlyOpen = request.security("SPY", "M", open[1], lookahead=barmerge.lookahead_on)
+spyMonthlyClose = request.security("SPY", "M", close, lookahead=barmerge.lookahead_on)
+[avgReturnSPY, probPositiveSPY, stdDevSPY, yearsSPY] = f_monthlyStats(spyMonthlyOpen, spyMonthlyClose, currentMonth)
+
+[lowerBoundStock, upperBoundStock] = f_calculateRange(avgReturnStock, stdDevStock)
+[lowerBoundSPY, upperBoundSPY] = f_calculateRange(avgReturnSPY, stdDevSPY)
+
+formatReturn(value) =>
+    color = value >= 0 ? color.green : color.red
+    string = str.tostring(value, "#.##") + "%"
+    [string, color]
+
+formatProbability(value) =>
+    string = str.tostring(value, "#") + "%"
+    [string, color.white]
+
+formatRange(lower, upper) =>
+    lowerStr = str.tostring(math.round(lower), "#") + "%"
+    upperStr = str.tostring(math.round(upper), "#") + "%"
+    "(" + lowerStr + " to " + upperStr + ")"
+
+[stockReturnText, stockReturnColor] = formatReturn(avgReturnStock)
+[spyReturnText, spyReturnColor] = formatReturn(avgReturnSPY)
+[stockProbText, _] = formatProbability(probPositiveStock)
+[spyProbText, _] = formatProbability(probPositiveSPY)
+stockRangeText = formatRange(lowerBoundStock, upperBoundStock)
+spyRangeText = formatRange(lowerBoundSPY, upperBoundSPY)
+
+if barstate.islast and showMonthAverage
+    var table monthlyTable = table.new(position.top_right, 5, 3, bgcolor = color.new(color.black, 0))
+    
+    table.cell(monthlyTable, 0, 0, currentMonthNamePlural, bgcolor=color.new(color.black, 0), text_color=color.white, text_size=size.normal)
+    table.cell(monthlyTable, 1, 0, "Avg. Return", bgcolor=color.new(color.black, 0), text_color=color.white, text_size=size.normal)
+    table.cell(monthlyTable, 2, 0, "Prob. >0", bgcolor=color.new(color.black, 0), text_color=color.white, text_size=size.normal)
+    table.cell(monthlyTable, 3, 0, "68% Range", bgcolor=color.new(color.black, 0), text_color=color.white, text_size=size.normal)
+    table.cell(monthlyTable, 4, 0, "Years", bgcolor=color.new(color.black, 0), text_color=color.white, text_size=size.normal)
+    
+    table.cell(monthlyTable, 0, 1, syminfo.ticker, text_color=color.white, text_size=size.normal)
+    table.cell(monthlyTable, 1, 1, stockReturnText, text_color=stockReturnColor, text_size=size.normal)
+    table.cell(monthlyTable, 2, 1, stockProbText, text_color=color.white, text_size=size.normal)
+    table.cell(monthlyTable, 3, 1, stockRangeText, text_color=color.white, text_size=size.normal)
+    table.cell(monthlyTable, 4, 1, str.tostring(yearsStock), text_color=color.white, text_size=size.normal)
+    
+    table.cell(monthlyTable, 0, 2, "SPY", text_color=color.white, text_size=size.normal)
+    table.cell(monthlyTable, 1, 2, spyReturnText, text_color=spyReturnColor, text_size=size.normal)
+    table.cell(monthlyTable, 2, 2, spyProbText, text_color=color.white, text_size=size.normal)
+    table.cell(monthlyTable, 3, 2, spyRangeText, text_color=color.white, text_size=size.normal)
+    table.cell(monthlyTable, 4, 2, str.tostring(yearsSPY), text_color=color.white, text_size=size.normal)
+
+// C and A CANSLIM
+get_financial(key) => request.financial(syminfo.tickerid, key, "FQ", ignore_invalid_symbol=true, gaps=barmerge.gaps_on)
+
+eps_raw = get_financial("EARNINGS_PER_SHARE")
+
+var eps = array.new<float>(0)
+if not na(eps_raw)
+    array.push(eps, eps_raw)
+
+perc_change(current, previous) =>
+    (current - previous) / math.abs(previous) * 100
+
+get(a, i) => i >= 0 ? array.get(a, i) : array.get(a, array.size(a) + i)
+
+yoy_growth() =>
+    current = get(eps, -1)
+    previous = get(eps, -5)  // 4 quarters ago
+    [current, previous, na(current) or na(previous) ? na : perc_change(current, previous)]
+
+qoq_growth() =>
+    current = get(eps, -1)
+    previous = get(eps, -2)
+    [current, previous, na(current) or na(previous) ? na : perc_change(current, previous)]
+
+if barstate.islast and showCAnslim
+    var table epsTable = table.new(position.bottom_left, 5, 3, frame_width=2, frame_color=color.new(color.black, 40))
+    
+    table.cell(epsTable, 0, 0, "CANSLIM", text_color=color.orange, text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 1, 0, "Growth", text_color=color.orange, text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 2, 0, "Current EPS", text_color=color.orange, text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 3, 0, "Previous EPS", text_color=color.orange, text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 4, 0, "Timeframe", text_color=color.orange, text_size=size.normal, bgcolor=color.black)
+
+    [qoq_current, qoq_previous, qoq] = qoq_growth()
+    table.cell(epsTable, 0, 1, "C", text_color=color.white, text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 1, 1, na(qoq) ? "N/A" : str.tostring(qoq, "#.#") + "%", 
+               text_color=qoq >= 25 ? color.green : (qoq < 0 ? color.red : color.white), 
+               text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 2, 1, na(qoq_current) ? "N/A" : str.tostring(qoq_current, "#.##"), 
+               text_color=color.white, text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 3, 1, na(qoq_previous) ? "N/A" : str.tostring(qoq_previous, "#.##"), 
+               text_color=color.white, text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 4, 1, "QoQ", text_color=color.white, text_size=size.normal, bgcolor=color.black)
+
+    [yoy_current, yoy_previous, yoy] = yoy_growth()
+    table.cell(epsTable, 0, 2, "A", text_color=color.white, text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 1, 2, na(yoy) ? "N/A" : str.tostring(yoy, "#.#") + "%", 
+               text_color=yoy >= 25 ? color.green : (yoy < 0 ? color.red : color.white), 
+               text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 2, 2, na(yoy_current) ? "N/A" : str.tostring(yoy_current, "#.##"), 
+               text_color=color.white, text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 3, 2, na(yoy_previous) ? "N/A" : str.tostring(yoy_previous, "#.##"), 
+               text_color=color.white, text_size=size.normal, bgcolor=color.black)
+    table.cell(epsTable, 4, 2, "YoY", text_color=color.white, text_size=size.normal, bgcolor=color.black)
+
+// ATR% of 50d EMA
+atrValue = request.security(syminfo.tickerid, "D", ta.atr(14))
+atrPercentage = atrValue / close * 100
+sma50 = request.security(syminfo.tickerid, "D", ta.ema(close, 50))
+percentGain = ((close - sma50) / sma50) * 100
+atrMultiple = percentGain / atrPercentage
+
+drawAtrMultipleLabel() =>
+    if show_atr_multiple
+        intMultiple = math.floor(math.abs(atrMultiple))
+        if atrMultiple > 0 and intMultiple >= positive_min and intMultiple <= positive_max
+            if intMultiple > math.abs(atrMultiple[1])
+                label_text = str.tostring(intMultiple) + "x"
+                label.new(bar_index, high, label_text, textcolor = color.white, color=color.new(color.green, 50), style=label.style_label_down, yloc=yloc.abovebar, size=size.small)
+        else if atrMultiple < 0 and intMultiple >= negative_min and intMultiple <= negative_max
+            if intMultiple > math.abs(atrMultiple[1])
+                label_text = "-" + str.tostring(intMultiple) + "x"
+                label.new(bar_index, low, label_text, textcolor = color.white, color=color.new(color.red, 50), style=label.style_label_up, yloc=yloc.belowbar, size=size.small)
+
+drawAtrMultipleLabel()
+
+// Overextension detection
+bb_length = 20
+bb_std = 2.0
+rsi_length = 14
+
+[bb_upper, bb_middle, bb_lower] = ta.bb(close, bb_length, bb_std)
+rsi = ta.rsi(close, rsi_length)
+
+is_overextended = (close > bb_upper * (1 + percentage_above_bb / 100) and rsi > rsi_threshold) and timeframe.isweekly
+
+// 52-week high detection
+is_52w_high = ta.highest(close, 52) == close and timeframe.isweekly
+
+overextended_icon = "⚠︎"
+high_icon = "·"
+
+plotchar(detectOX ? is_overextended : na, char=overextended_icon, location=location.abovebar, color=color.red, size=size.tiny, title="Overextended")
+plotchar(show52 ? is_52w_high : na, char=high_icon, location=location.abovebar, color=color.yellow, size=size.tiny, title="52-Week High")
+
+// Filters
+[macdLine, signalLine, histogram] = ta.macd(close, 12, 26, 9)
+
+daily_close = request.security(syminfo.tickerid, "D", close)
+daily_high = request.security(syminfo.tickerid, "D", high)
+daily_low = request.security(syminfo.tickerid, "D", low)
+
+sma150 = ta.sma(daily_close, 150)
+sma200 = ta.sma(daily_close, 200)
+
+weekly_sma150 = ta.sma(close, 30)
+weekly_sma200 = ta.sma(close, 40)
+weekly_sma50 = ta.sma(close, 10)
+
+high52 = ta.highest(daily_high, 260)
+low52 = ta.lowest(daily_low, 260)
+
+criterion1 = daily_close > sma150 and daily_close > sma200
+criterion2 = sma150 > sma200
+criterion3 = ta.sma(daily_close, 200)[20] < sma200
+criterion4 = sma50 > sma150 and sma50 > sma200
+criterion5 = daily_close > sma50
+criterion6 = daily_close >= (low52 * 1.3)
+criterion7 = daily_close >= (high52 * 0.75)
+criterion8 = rsi > 70
+
+all_criteria = criterion1 and criterion2 and criterion3 and criterion4 and criterion5 and criterion6 and criterion7 and criterion8
+
+minervini_check = all_criteria ? "✅" : "⚠️"
+
+spy_ema_10 = ta.ema(request.security("SPY", "W", close), 10)
+spy_ema_20 = ta.ema(request.security("SPY", "W", close), 20)
+
+current_diff = spy_ema_10 - spy_ema_20
+previous_diff = spy_ema_10[1] - spy_ema_20[1]
+
+is_widening = current_diff > previous_diff
+diff_direction = is_widening ? "widening" : "narrowing"
+
+diff_percent = (current_diff / request.security("SPY", "W", close)) * 100
+
+diff_color = diff_percent > 1 ? color.green : diff_percent > 0 ? color.yellow : color.red
+
+generate_minervini_tooltip() =>
+    var string tooltip = "Minervini Criteria:\n"
+    tooltip := tooltip + (criterion1 ? "✓" : "✗") + " Price > 150 SMA & 200 SMA\n"
+    tooltip := tooltip + (criterion2 ? "✓" : "✗") + " 150 SMA > 200 SMA\n"
+    tooltip := tooltip + (criterion3 ? "✓" : "✗") + " 200 SMA trending up\n"
+    tooltip := tooltip + (criterion4 ? "✓" : "✗") + " 50 SMA > 150 SMA & 200 SMA\n"
+    tooltip := tooltip + (criterion5 ? "✓" : "✗") + " Price > 50 SMA\n"
+    tooltip := tooltip + (criterion6 ? "✓" : "✗") + " Price > 30% above 52w low\n"
+    tooltip := tooltip + (criterion7 ? "✓" : "✗") + " Price within 25% of 52w high\n"
+    tooltip := tooltip + (criterion8 ? "✓" : "✗") + " RSI > 70\n"
+    tooltip
+
+trend_label(curr, prev) =>
+    math.abs(curr) > math.abs(prev) ? "widening" : "narrowing"
+
+dynamic_transparency_macd(value) =>
+    abs_value = math.abs(value)
+    if abs_value >= 1
+        0
+    else
+        math.round(90 - (abs_value * 90))
+
+dynamic_color_transparency_ema(value) =>
+    if value >= 2
+        [color.green, 0]
+    else if value <= -2
+        [color.red, 0]
+    else
+        transparency = math.round(90 - math.abs(value) / 2 * 90)
+        if value > 0
+            [color.green, transparency]
+        else if value < 0
+            [color.red, transparency]
+        else
+            [color.gray, 90]
+
+if barstate.islast and showFilters
+    var t = table.new(position.bottom_right, columns=2, rows=3, frame_width=0, frame_color=color.gray, bgcolor=color.new(color.black, 80))
+    
+    macd_trend = trend_label(histogram, histogram[1])
+    macd_color = histogram > 0 ? color.green : color.red
+    macd_transparency = dynamic_transparency_macd(histogram)
+    table.cell(t, 0, 0, "MACD Histogram:", text_color=color.white)
+    table.cell(t, 1, 0, str.tostring(math.round(histogram, 2), "#.##") + " (" + macd_trend + ")", 
+               text_color=color.white, bgcolor=color.new(macd_color, macd_transparency))
+
+    ema_trend = trend_label(current_diff, previous_diff)
+    [ema_color, ema_transparency] = dynamic_color_transparency_ema(diff_percent)
+    table.cell(t, 0, 1, "SPY EMA 10/20:", text_color=color.white)
+    table.cell(t, 1, 1, str.tostring(diff_percent, "#.##") + "% (" + ema_trend + ")", 
+               text_color=color.white, bgcolor=color.new(ema_color, ema_transparency))
+
+    minervini_tooltip = generate_minervini_tooltip()
+    table.cell(t, 0, 2, "Minervini Criteria:", text_color=color.white)
+    table.cell(t, 1, 2, minervini_check, text_color=color.white, tooltip=minervini_tooltip)
+
+get_lookback_period() =>
+    if timeframe.isseconds
+        math.round(252 * 6.5 * 60 * 60 / timeframe.multiplier)
+    else if timeframe.isminutes
+        math.round(252 * 6.5 * 60 / timeframe.multiplier)
+    else if timeframe.isdaily
+        252
+    else if timeframe.isweekly
+        52
+    else if timeframe.ismonthly
+        12
+    else
+        252
+
+lookback_period = get_lookback_period()
+
+highest_high = ta.highest(high, lookback_period)
+lowest_low = ta.lowest(low, lookback_period)
+
+// Calculate the middle line based on user-defined percentage
+level_percent_below = highest_high * (1 - middleLinePercentage / 100)
+
+// Function to get line style
+get_line_style() =>
+    switch lineStyle
+        "Solid" => line.style_solid
+        "Dashed" => line.style_dashed
+        "Dotted" => line.style_dotted
+
+if barstate.islast and show52WeekElements
+    label_x = bar_index + spaces
+    
+    if showHighLine
+        line.new(x1=bar_index[lookback_period], y1=highest_high, x2=bar_index, y2=highest_high, color=highColor, style=get_line_style())
+    label.new(x=label_x, y=highest_high, text=highText, color=highColor, textcolor=color.white, style=label.style_label_left, xloc=xloc.bar_index)
+    
+    if showLowLine
+        line.new(x1=bar_index[lookback_period], y1=lowest_low, x2=bar_index, y2=lowest_low, color=lowColor, style=get_line_style())
+    label.new(x=label_x, y=lowest_low, text=lowText, color=lowColor, textcolor=color.white, style=label.style_label_left, xloc=xloc.bar_index)
+    
+    if showMiddleLine
+        line.new(x1=bar_index[lookback_period], y1=level_percent_below, x2=bar_index, y2=level_percent_below, color=middleColor, style=get_line_style())
+    label.new(x=label_x, y=level_percent_below, text=middleText + " (" + str.tostring(middleLinePercentage, "#.#") + "%)", color=middleColor, textcolor=color.white, style=label.style_label_left, xloc=xloc.bar_index)
+
+// Modify the 52-week high marker to respect the new setting
+plotchar(show52WeekElements and show52 ? is_52w_high : na, char=high_icon, location=location.abovebar, color=color.yellow, size=size.tiny, title="52-Week High")
+
+// Modify alert checks to respect the new setting
+if show52WeekElements
+    if alertOnHighCross
+        if ta.crossover(close, highest_high)
+            alert("Price crossed above " + highText, alert.freq_once_per_bar_close)
+        if ta.crossunder(close, highest_high)
+            alert("Price crossed below " + highText, alert.freq_once_per_bar_close)
+
+    if alertOnLowCross
+        if ta.crossover(close, lowest_low)
+            alert("Price crossed above " + lowText, alert.freq_once_per_bar_close)
+        if ta.crossunder(close, lowest_low)
+            alert("Price crossed below " + lowText, alert.freq_once_per_bar_close)
+
+    if alertOnMiddleCross
+        if ta.crossover(close, level_percent_below)
+            alert("Price crossed above " + middleText, alert.freq_once_per_bar_close)
+        if ta.crossunder(close, level_percent_below)
+            alert("Price crossed below " + middleText, alert.freq_once_per_bar_close)
