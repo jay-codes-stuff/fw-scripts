@@ -1,0 +1,90 @@
+//@version=5
+indicator("52w thresholds multiple timeframes", overlay=true)
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © marsrides
+// v 1.0 September 2024
+
+// Inputs
+middleLinePercentage = input.float(20, "Middle Line Percentage", minval=1, maxval=100, step=0.1)
+
+highColor = input.color(color.green, "High Color", group="Cosmetics")
+lowColor = input.color(color.red, "Low Color", group="Cosmetics")
+middleColor = input.color(color.orange, "Middle Line Color", group="Cosmetics")
+lineStyle = input.string("Solid", "Line Style", options=["Solid", "Dashed", "Dotted"], group="Cosmetics")
+
+highText = input.string("52w High", "High Label", group="Labels")
+lowText = input.string("52w Low", "Low Label", group="Labels")
+middleText = input.string("% off high", "Middle Line Label", group="Labels")
+spaces = input.int(5, "Horizontal spaces between price and labels", minval=0), group="Labels"
+
+showHighLine = input.bool(true, "Show High Line", group="Visibility")
+showLowLine = input.bool(true, "Show Low Line", group="Visibility")
+showMiddleLine = input.bool(true, "Show Middle Line", group="Visibility")
+
+// Alarm inputs
+alertOnHighCross = input.bool(false, "Alert on High Line Cross", group="Alerts")
+alertOnLowCross = input.bool(false, "Alert on Low Line Cross", group="Alerts")
+alertOnMiddleCross = input.bool(false, "Alert on Middle Line Cross", group="Alerts")
+
+get_lookback_period() =>
+    if timeframe.isseconds
+        math.round(252 * 6.5 * 60 * 60 / timeframe.multiplier)
+    else if timeframe.isminutes
+        math.round(252 * 6.5 * 60 / timeframe.multiplier)
+    else if timeframe.isdaily
+        252
+    else if timeframe.isweekly
+        52
+    else if timeframe.ismonthly
+        12
+    else
+        252
+
+lookback_period = get_lookback_period()
+
+highest_high = ta.highest(high, lookback_period)
+lowest_low = ta.lowest(low, lookback_period)
+
+// Calculate the middle line based on user-defined percentage
+level_percent_below = highest_high * (1 - middleLinePercentage / 100)
+
+// Function to get line style
+get_line_style() =>
+    switch lineStyle
+        "Solid" => line.style_solid
+        "Dashed" => line.style_dashed
+        "Dotted" => line.style_dotted
+
+if barstate.islast
+    label_x = bar_index + spaces
+    
+    if showHighLine
+        line.new(x1=bar_index[lookback_period], y1=highest_high, x2=bar_index, y2=highest_high, color=highColor, style=get_line_style())
+    label.new(x=label_x, y=highest_high, text=highText, color=highColor, textcolor=color.white, style=label.style_label_left, xloc=xloc.bar_index)
+    
+    if showLowLine
+        line.new(x1=bar_index[lookback_period], y1=lowest_low, x2=bar_index, y2=lowest_low, color=lowColor, style=get_line_style())
+    label.new(x=label_x, y=lowest_low, text=lowText, color=lowColor, textcolor=color.white, style=label.style_label_left, xloc=xloc.bar_index)
+    
+    if showMiddleLine
+        line.new(x1=bar_index[lookback_period], y1=level_percent_below, x2=bar_index, y2=level_percent_below, color=middleColor, style=get_line_style())
+    label.new(x=label_x, y=level_percent_below, text=middleText + " (" + str.tostring(middleLinePercentage, "#.#") + "%)", color=middleColor, textcolor=color.white, style=label.style_label_left, xloc=xloc.bar_index)
+
+// Alert checks
+if alertOnHighCross
+    if ta.crossover(close, highest_high)
+        alert("Price crossed above " + highText, alert.freq_once_per_bar_close)
+    if ta.crossunder(close, highest_high)
+        alert("Price crossed below " + highText, alert.freq_once_per_bar_close)
+
+if alertOnLowCross
+    if ta.crossover(close, lowest_low)
+        alert("Price crossed above " + lowText, alert.freq_once_per_bar_close)
+    if ta.crossunder(close, lowest_low)
+        alert("Price crossed below " + lowText, alert.freq_once_per_bar_close)
+
+if alertOnMiddleCross
+    if ta.crossover(close, level_percent_below)
+        alert("Price crossed above " + middleText, alert.freq_once_per_bar_close)
+    if ta.crossunder(close, level_percent_below)
+        alert("Price crossed below " + middleText, alert.freq_once_per_bar_close)
