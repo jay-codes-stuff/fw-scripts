@@ -1,6 +1,6 @@
 //@version=5
 //(c) Jay
-indicator("Relative Strength Line", overlay=false)
+indicator("RS Line + Denoised Breakout Signals", overlay=false)
 
 // Input parameters
 comparisonSymbol = input.symbol("SPX", title="Comparison Symbol")
