@@ -1,6 +1,6 @@
 //@version=5
 //(c) Jay
-indicator("RS Line + Denoised Breakout Signals", overlay=false)
+indicator("RS Line + Denoised bbreakout signals", overlay=false)
 
 // Input parameters
 comparisonSymbol = input.symbol("SPX", title="Comparison Symbol")
@@ -12,7 +12,6 @@ slopeNoiseThreshold = input.float(0.01,"Slope Noise threshold")
 showBreakoutSignals = input.bool(true, title="Show Breakout Signals")
 breakoutDenoise = input.float(0.01,title="Breakout denoise factor")
 breakoutRsLookback = input.int(9,"Breakout RS Lookback")
-breakoutVolThresholdPct = input.float(125,"Breakout Volume Confimration Threshold")
 
 //styles
 rsLineUpColor=input.color(color.aqua,"Ascending RS Line")
@@ -42,8 +41,8 @@ fill(rsLine,avgLine,color=diff<0?shadingBelowColor:shadingAboveColor)
 boRS=ta.ema(data,breakoutRsLookback)/ta.ema(data2,breakoutRsLookback)
 
 // Breakout signals
-upSignal = boRS/avg>(1+breakoutDenoise) and boRS[1]/avg[1]<(1+breakoutDenoise) and volume > ta.sma(volume,24)*breakoutVolThresholdPct/100? 0 : na 
-downSignal = boRS/avg<1/(1+breakoutDenoise) and boRS[1]/avg[1]>1/(1+breakoutDenoise) and volume > ta.sma(volume,24)*breakoutVolThresholdPct/100 ? 0 : na 
+upSignal = boRS/avg>(1+breakoutDenoise) and boRS[1]/avg[1]<(1+breakoutDenoise) ? 0 : na 
+downSignal = boRS/avg<1/(1+breakoutDenoise) and boRS[1]/avg[1]>1/(1+breakoutDenoise) ? 0 : na 
 
 
 plotshape(upSignal, style=shape.triangleup, location=location.absolute, color=color.green, size=size.tiny, display=showBreakoutSignals ? display.all : display.none)
