@@ -1,0 +1,42 @@
+//@version=5
+//(c) Jay
+indicator("Relative Strength Line", overlay=false)
+
+// Input parameters
+comparisonSymbol = input.symbol("SPX", title="Comparison Symbol")
+signalType = input.source(close,"Signal source")
+lookback = input.int(1, title="Lookback Length")
+slowLength = input.int(21, title="RS EMA length")
+showBreakoutSignals = input.bool(true, title="Show Breakout Signals")
+
+//styles
+rsLineUpColor=input.color(color.aqua,"Ascending RS Line")
+rsLineDownColor=input.color(color.purple,"Descending RS Line")
+shadingAboveColor=input.color(color.new(color.aqua,40))
+shadingBelowColor=input.color(color.new(color.aqua,40))
+
+
+// Data retrieval and calculations
+data2 = request.security(comparisonSymbol, timeframe.period, signalType) 
+data = signalType
+fastMA = ta.ema(data, lookback)
+fastMAComparison = ta.ema(data2, lookback)
+rs = fastMA / fastMAComparison
+
+avg = ta.ema(rs, slowLength)
+diff = rs - avg
+
+// Plotting
+rsLine=plot(series=rs,color=rs>ta.ema(rs,9)?rsLineUpColor:rsLineDownColor,linewidth = 2)
+avgLine=plot(series=avg,color=color.orange)
+fill(rsLine,avgLine,color=diff>0?shadingAboveColor:shadingBelowColor)
+
+
+
+// Breakout signals
+UpSignal = diff > 0 and diff[1] <= 0 ? 0 : na 
+DownSignal = diff < 0 and diff[1] >= 0 ? 0 : na 
+
+plotshape(UpSignal, style=shape.triangleup, location=location.absolute, color=color.green, size=size.tiny, display=showBreakoutSignals ? display.all : display.none)
+
+plotshape(DownSignal, style=shape.triangledown, location=location.absolute, color=color.red, size=size.tiny, display=showBreakoutSignals ? display.all : display.none)
